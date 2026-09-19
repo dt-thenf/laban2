@@ -468,11 +468,11 @@ static Vec3 applyMagCalibration(const Vec3& raw) {
 
 static const char* qualityText(HeadingQuality q) {
   switch (q) {
-    case HeadingQuality::OK: return "OK";
-    case HeadingQuality::NO_MAG_CAL: return "NO_MAG_CAL";
-    case HeadingQuality::MAG_DISTURBANCE: return "MAG_DISTURBANCE";
-    case HeadingQuality::VERTICAL_HOLD: return "VERTICAL_HOLD";
-    default: return "SENSOR_ERROR";
+    case HeadingQuality::OK: return "Tốt";
+    case HeadingQuality::NO_MAG_CAL: return "Chưa hiệu chỉnh từ kế";
+    case HeadingQuality::MAG_DISTURBANCE: return "Nhiễu từ";
+    case HeadingQuality::VERTICAL_HOLD: return "Giữ hướng do thiết bị gần thẳng đứng";
+    default: return "Lỗi cảm biến";
   }
 }
 
@@ -738,43 +738,44 @@ static void printMatrix() {
 }
 
 static void printStatus() {
-  Serial.printf("SENSORS,ADXL345=%d,ITG3205=%d,HMC5883L=%d\n",
-                sensorStatus.accel, sensorStatus.gyro, sensorStatus.mag);
-  Serial.printf("CFG,gyro=%d,mag=%d,decl=%.3f\n",
-                !!(cfg.flags & CFG_GYRO_CAL),
-                !!(cfg.flags & CFG_MAG_CAL),
+  Serial.println("===== TRẠNG THÁI HỆ THỐNG =====");
+  Serial.printf("CẢM_BIẾN,ADXL345=%s,ITG3205=%s,HMC5883L=%s\n",
+                sensorStatus.accel ? "OK" : "LỖI",
+                sensorStatus.gyro  ? "OK" : "LỖI",
+                sensorStatus.mag   ? "OK" : "LỖI");
+  Serial.printf("HIỆU_CHỈNH,gyro=%s,từ_kế=%s,độ_từ_thiên=%.3f°\n",
+                (cfg.flags & CFG_GYRO_CAL) ? "ĐÃ_CÓ" : "CHƯA_CÓ",
+                (cfg.flags & CFG_MAG_CAL) ? "ĐÃ_CÓ" : "CHƯA_CÓ",
                 cfg.declinationDeg);
-  Serial.println("MOUNT,fixed=1,x=HEAD,y=LEFT,z=BODY,forward=-Z,pcb_back=FRONT");
-  Serial.printf("GYRO_BIAS_DPS,%.6f,%.6f,%.6f\n",
+  Serial.println("TƯ_THẾ_ĐEO,+X=LÊN_ĐẦU,+Y=TAY_TRÁI,+Z=VÀO_NGƯỜI,HƯỚNG_TIẾN=-Z");
+  Serial.printf("BIAS_GYRO,ω0=(%.6f,%.6f,%.6f)°/s\n",
                 cfg.gyroBiasDps[0], cfg.gyroBiasDps[1], cfg.gyroBiasDps[2]);
   printMatrix();
-  Serial.printf("UP,%.5f,%.5f,%.5f\n",
+  Serial.printf("VECTOR_LÊN,U=(%.5f,%.5f,%.5f)\n",
                 gravityEstimator.upBody.x,
                 gravityEstimator.upBody.y,
                 gravityEstimator.upBody.z);
 
   if (headingFilterInit) {
-    Serial.printf("HEADING_FILTERED,%.2f\n", headingFilteredDeg);
+    Serial.printf("GÓC_ĐÃ_LỌC,θ=%.2f°\n", headingFilteredDeg);
   }
 }
 
 static void printHelp() {
-  Serial.println("COMMANDS:");
-  Serial.println("  HELP");
-  Serial.println("  STATUS");
-  Serial.println("  SCAN");
-  Serial.println("  GYRO_CAL                 # keep device still ~2 s; saves bias");
-  Serial.println("  MAG_CAL_START            # rotate figure-8 + all faces");
-  Serial.println("  MAG_CAL_STOP             # basic hard-iron + diagonal soft-iron");
-  Serial.println("  MAG_STREAM 1|0           # print MAGCSV,x,y,z for Python tool");
-  Serial.println("  RAW 1|0                  # stream accel/gyro/mag raw values");
+  Serial.println("===== LỆNH SERIAL =====");
+  Serial.println("  HELP                      # xem hướng dẫn");
+  Serial.println("  STATUS                    # xem trạng thái cảm biến và hiệu chỉnh");
+  Serial.println("  SCAN                      # quét địa chỉ I2C");
+  Serial.println("  GYRO_CAL                  # để yên thiết bị ~2 giây, lưu bias gyro");
+  Serial.println("  MAG_CAL_START             # bắt đầu hiệu chỉnh từ kế");
+  Serial.println("  MAG_CAL_STOP              # kết thúc hiệu chỉnh từ kế cơ bản");
+  Serial.println("  MAG_STREAM 1|0            # xuất MAGCSV cho công cụ Python");
+  Serial.println("  RAW 1|0                   # xuất dữ liệu thô accel/gyro/mag");
   Serial.println("  MAG_MATRIX bX bY bZ m00 m01 m02 m10 m11 m12 m20 m21 m22 ref");
-  Serial.println("  MAG_RESET");
-  Serial.println("  DECL <degrees>            # east positive, west negative");
-  Serial.println("  MOUNT_CHECK               # wear upright; verifies +X points to head");
-  Serial.println("  ARROW_SET ...             # legacy: ignored; fixed mounting uses -Z");
-  Serial.println("  ARROW_RESET               # legacy: ignored");
-  Serial.println("  RESET_ALL");
+  Serial.println("  MAG_RESET                 # xóa hiệu chỉnh từ kế");
+  Serial.println("  DECL <độ>                 # độ từ thiên: Đông dương, Tây âm");
+  Serial.println("  MOUNT_CHECK               # kiểm tra +X có hướng lên đầu khi đeo");
+  Serial.println("  RESET_ALL                 # xóa toàn bộ cấu hình đã lưu");
 }
 
 static void scanI2C() {
@@ -795,16 +796,16 @@ static void printMountCheck() {
   Vec3 expectedUp = wearableNominalUpBody();
   float alignment = vDot(up, expectedUp);
 
-  const char* result = "CHECK_AXIS_MAP";
+  const char* result = "CẦN_KIỂM_TRA_AXIS_MAP";
   if (alignment >= 0.80f) {
-    result = "OK";
+    result = "ĐÚNG";
   } else if (alignment <= -0.80f) {
-    result = "X_REVERSED_OR_DEVICE_UPSIDE_DOWN";
+    result = "X_BỊ_NGƯỢC_HOẶC_ĐEO_NGƯỢC";
   }
 
   Serial.printf(
-    "MOUNT_CHECK,result=%s,alignment=%.3f,up=%.3f,%.3f,%.3f,"
-    "expected_up=+X,forward=-Z\n",
+    "KIỂM_TRA_ĐEO,kết_quả=%s,độ_phù_hợp=%.3f,U=(%.3f,%.3f,%.3f),"
+    "U_kỳ_vọng=+X,hướng_tiến=-Z\n",
     result, alignment, up.x, up.y, up.z
   );
 }
@@ -938,7 +939,16 @@ static void handleCommand(String line) {
 // -----------------------------------------------------------------------------
 
 static const char* cardinal8(float deg) {
-  static const char* names[8] = {"N","NE","E","SE","S","SW","W","NW"};
+  static const char* names[8] = {
+    "Bắc",
+    "Đông Bắc",
+    "Đông",
+    "Đông Nam",
+    "Nam",
+    "Tây Nam",
+    "Tây",
+    "Tây Bắc"
+  };
   int idx = (int)floorf((wrap360(deg) + 22.5f) / 45.0f) & 7;
   return names[idx];
 }
@@ -952,8 +962,8 @@ void setup() {
   delay(300);
 
   Serial.println();
-  Serial.println("GY85_WEARABLE_COMPASS,BOOT");
-  Serial.println("MOUNT,fixed=1,x=HEAD,y=LEFT,z=BODY,forward=-Z,pcb_back=FRONT");
+  Serial.println("LA_BÀN_GY85,KHỞI_ĐỘNG");
+  Serial.println("TƯ_THẾ_ĐEO,+X=LÊN_ĐẦU,+Y=TAY_TRÁI,+Z=VÀO_NGƯỜI,HƯỚNG_TIẾN=-Z");
 
   bool loaded = loadConfig();
   Serial.printf("CFG,%s\n", loaded ? "LOADED" : "DEFAULTS");
@@ -1053,8 +1063,8 @@ void loop() {
 
     float outHeading = headingFilterInit ? headingFilteredDeg : 0.0f;
     Serial.printf(
-      "COMPASS,heading=%.2f,raw=%.2f,dir=%s,quality=%s,mount=FIXED_NEG_Z,"
-      "magNorm=%.3f,fwdHoriz=%.3f,up=%.3f,%.3f,%.3f\n",
+      "LA_BÀN,θ=%.2f°,θ_thô=%.2f°,hướng=%s,trạng_thái=%s,"
+      "|B|=%.3f,F_ngang=%.3f,U=(%.3f,%.3f,%.3f)\n",
       outHeading,
       lastHeadingResult.headingDeg,
       cardinal8(outHeading),
