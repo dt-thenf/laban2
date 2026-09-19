@@ -348,53 +348,51 @@ Không nên hard-code một declination dùng cho mọi vị trí.
 
 ---
 
-## 9. Set mũi tên vật lý đúng **một lần**
+## 9. Cấu hình đeo cố định của dự án
 
-Đây là phần dành cho trường hợp thiết kế cơ khí chưa xác định trước mũi tên của vỏ thiết bị trùng với trục X/Y nào của GY-85.
+Firmware được cấu hình theo đúng cách đeo thực tế:
 
-Firmware coi mũi tên là một vector cố định nằm trong mặt phẳng bo mạch. Góc giữa mũi tên và frame của GY-85 được xác lập một lần rồi lưu.
+- mũi tên **+X** in trên PCB hướng lên đầu;
+- mũi tên **+Y** hướng sang tay trái;
+- mặt PCB giống ảnh tham chiếu hướng ra phía trước;
+- mặt chứa các IC hướng vào cơ thể.
 
-### Cách dễ nhất: căn về Bắc
+Với hệ trục tay phải này:
 
-1. Hoàn thành magnetometer calibration.
-2. Nếu cần True North, nhập \`DECL\` trước.
-3. Đặt thiết bị **gần nằm ngang**.
-4. Xoay toàn bộ thiết bị sao cho **mũi tên vật lý thực tế** chỉ đúng Bắc.
-5. Gõ:
+```
++X = HEAD
++Y = LEFT
++Z = BODY / inward
+FORWARD = -Z
+```
 
-\`\`\`
-ARROW_SET 0
-\`\`\`
+Do đó firmware dùng trực tiếp vector:
 
-Kết quả:
+```cpp
+Vec3(0.0f, 0.0f, -1.0f)
+```
 
-\`\`\`
-ARROW_SET,SAVED,...
-\`\`\`
+làm hướng phía trước của người đeo.
 
-Từ lần khởi động sau không cần set lại.
+**Không cần `ARROW_SET`.** Thiết bị được sử dụng khi PCB nằm dọc sát người.
 
-### Căn theo một hướng bất kỳ
+### Kiểm tra tư thế đeo
 
-Không bắt buộc phải tìm đúng Bắc.
+Đeo thiết bị đúng vị trí, đứng thẳng và nhập:
 
-Ví dụ một la bàn tham chiếu tốt cho biết hướng đang chỉ là **72°**. Giữ mũi tên vật lý của thiết bị đúng theo cùng hướng đó và gõ:
+```
+MOUNT_CHECK
+```
 
-\`\`\`
-ARROW_SET 72
-\`\`\`
+Kết quả mong muốn:
 
-Firmware tự tính offset giữa frame GY-85 và mũi tên vật lý rồi lưu NVS.
+```
+MOUNT_CHECK,result=OK,...
+```
 
-### Vì sao lúc ARROW_SET phải gần nằm ngang?
+Khi đứng thẳng, vector `UP` phải gần `+X`, vì +X đang hướng lên đầu.
 
-Một offset yaw duy nhất mô tả chính xác mũi tên nằm trong mặt phẳng bo mạch. Khi bo nghiêng mạnh, quan hệ giữa góc trong mặt phẳng PCB và góc chiếu ngang không còn tuyến tính đơn giản.
-
-Firmware kiểm tra mức nằm ngang và từ chối nếu bo nghiêng quá nhiều:
-
-\`\`\`
-ARROW_SET,FAILED,device_not_level,...
-\`\`\`
+Nếu nhận `X_REVERSED_OR_DEVICE_UPSIDE_DOWN`, hướng X đang ngược hoặc thiết bị bị đeo ngược. Nếu nhận `CHECK_AXIS_MAP`, cần kiểm tra lại `ACCEL_MAP / GYRO_MAP / MAG_MAP`.
 
 ---
 
@@ -404,13 +402,13 @@ Luồng sử dụng bình thường:
 
 1. Bật nguồn.
 2. ESP32 đọc calibration từ NVS.
-3. Không cần set lại mũi tên.
+3. Firmware dùng cố định hướng người đeo = -Z của PCB.
 4. Heading xuất liên tục.
 
 Ví dụ:
 
 \`\`\`
-COMPASS,heading=83.42,raw=84.10,dir=E,quality=OK,arrow=SET,...
+COMPASS,heading=83.42,raw=84.10,dir=E,quality=OK,mount=FIXED_NEG_Z,...
 \`\`\`
 
 Các hướng 8 phương:
@@ -478,7 +476,7 @@ Firmware giữ heading trước đó thay vì tin một measurement bất thư�
 
 ### \`VERTICAL_HOLD\`
 
-Mũi tên đang gần thẳng đứng, horizontal projection quá nhỏ.
+Hướng phía trước `-Z` đang gần thẳng đứng, horizontal projection quá nhỏ.
 
 Heading cũ được giữ lại để tránh flip.
 
@@ -501,9 +499,9 @@ Một eCompass chỉ bù nghiêng đúng khi:
 Đầu sketch có:
 
 \`\`\`cpp
-static constexpr AxisMap ACCEL_MAP = {{0,1,2}, {+1,+1,+1}};
-static constexpr AxisMap GYRO_MAP  = {{0,1,2}, {+1,+1,+1}};
-static constexpr AxisMap MAG_MAP   = {{0,1,2}, {+1,+1,+1}};
+static constexpr AxisMap ACCEL_MAP(0, 1, 2, +1, +1, +1);
+static constexpr AxisMap GYRO_MAP (0, 1, 2, +1, +1, +1);
+static constexpr AxisMap MAG_MAP  (0, 1, 2, +1, +1, +1);
 \`\`\`
 
 Mặc định là identity.
@@ -572,7 +570,7 @@ Giữ vị trí, chỉ thay đổi:
 
 Heading không nên chạy hàng chục độ chỉ vì tilt.
 
-Nếu sai số thay đổi theo góc nghiêng, lỗi thường đến từ calibration hoặc axis alignment, không phải từ arrow offset.
+Nếu sai số thay đổi theo góc nghiêng, lỗi thường đến từ calibration hoặc axis alignment.
 
 ---
 
