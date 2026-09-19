@@ -19,6 +19,7 @@
 #include <Wire.h>
 #include <Preferences.h>
 #include <math.h>
+#include "CompassTypes.h"
 
 // -----------------------------------------------------------------------------
 // Hardware / timing
@@ -48,22 +49,16 @@ static constexpr float MAG_NORM_MAX_RATIO = 1.55f;
 // Small vector helpers
 // -----------------------------------------------------------------------------
 
-struct Vec3 {
-  float x = 0.0f;
-  float y = 0.0f;
-  float z = 0.0f;
-};
-
 static inline Vec3 vAdd(const Vec3& a, const Vec3& b) {
-  return {a.x + b.x, a.y + b.y, a.z + b.z};
+  return Vec3(a.x + b.x, a.y + b.y, a.z + b.z);
 }
 
 static inline Vec3 vSub(const Vec3& a, const Vec3& b) {
-  return {a.x - b.x, a.y - b.y, a.z - b.z};
+  return Vec3(a.x - b.x, a.y - b.y, a.z - b.z);
 }
 
 static inline Vec3 vScale(const Vec3& a, float s) {
-  return {a.x * s, a.y * s, a.z * s};
+  return Vec3(a.x * s, a.y * s, a.z * s);
 }
 
 static inline float vDot(const Vec3& a, const Vec3& b) {
@@ -71,11 +66,11 @@ static inline float vDot(const Vec3& a, const Vec3& b) {
 }
 
 static inline Vec3 vCross(const Vec3& a, const Vec3& b) {
-  return {
+  return Vec3(
     a.y*b.z - a.z*b.y,
     a.z*b.x - a.x*b.z,
     a.x*b.y - a.y*b.x
-  };
+  );
 }
 
 static inline float vNorm(const Vec3& a) {
@@ -84,7 +79,7 @@ static inline float vNorm(const Vec3& a) {
 
 static inline Vec3 vNormalize(const Vec3& a) {
   float n = vNorm(a);
-  if (n < 1.0e-9f) return {0.0f, 0.0f, 0.0f};
+  if (n < 1.0e-9f) return Vec3(0.0f, 0.0f, 0.0f);
   return vScale(a, 1.0f / n);
 }
 
@@ -119,22 +114,17 @@ static inline float wrap180(float deg) {
 // Example to map body X = native Y, body Y = -native X, body Z = native Z:
 //   {{1,0,2}, {+1,-1,+1}}
 
-struct AxisMap {
-  uint8_t src[3];
-  int8_t sign[3];
-};
-
-static constexpr AxisMap ACCEL_MAP = {{0,1,2}, {+1,+1,+1}};
-static constexpr AxisMap GYRO_MAP  = {{0,1,2}, {+1,+1,+1}};
-static constexpr AxisMap MAG_MAP   = {{0,1,2}, {+1,+1,+1}};
+static constexpr AxisMap ACCEL_MAP(0, 1, 2, +1, +1, +1);
+static constexpr AxisMap GYRO_MAP (0, 1, 2, +1, +1, +1);
+static constexpr AxisMap MAG_MAP  (0, 1, 2, +1, +1, +1);
 
 static Vec3 applyAxisMap(const Vec3& in, const AxisMap& m) {
   const float a[3] = {in.x, in.y, in.z};
-  return {
+  return Vec3(
     a[m.src[0]] * m.sign[0],
     a[m.src[1]] * m.sign[1],
     a[m.src[2]] * m.sign[2]
-  };
+  );
 }
 
 // -----------------------------------------------------------------------------
@@ -143,32 +133,6 @@ static Vec3 applyAxisMap(const Vec3& in, const AxisMap& m) {
 
 static constexpr uint32_t CFG_MAGIC = 0x47593835UL; // "GY85"
 static constexpr uint16_t CFG_VERSION = 3;
-
-enum ConfigFlags : uint8_t {
-  CFG_GYRO_CAL = 1 << 0,
-  CFG_MAG_CAL  = 1 << 1,
-  CFG_ARROW_SET = 1 << 2
-};
-
-struct PersistentConfig {
-  uint32_t magic;
-  uint16_t version;
-  uint16_t size;
-
-  float gyroBiasDps[3];
-
-  float magBias[3];
-  float magMatrix[9];
-  float magRefNorm;
-
-  float declinationDeg;
-  float arrowYawDeg;
-
-  uint8_t flags;
-  uint8_t reserved[3];
-
-  uint32_t crc32;
-};
 
 Preferences prefs;
 PersistentConfig cfg{};
@@ -351,11 +315,11 @@ static bool readAccel(Vec3& outG) {
   int16_t rz = (int16_t)((uint16_t)b[5] << 8 | b[4]);
 
   // Full-resolution mode is approximately 3.9 mg/LSB.
-  Vec3 native = {
+  Vec3 native(
     rx * 0.00390625f,
     ry * 0.00390625f,
     rz * 0.00390625f
-  };
+  );
   outG = applyAxisMap(native, ACCEL_MAP);
   return true;
 }
@@ -369,11 +333,11 @@ static bool readGyroRawDps(Vec3& outDps) {
   int16_t rz = (int16_t)((uint16_t)b[4] << 8 | b[5]);
 
   // ITG-3200/3205 sensitivity at FS_SEL=3: 14.375 LSB/(deg/s).
-  Vec3 native = {
+  Vec3 native(
     rx / 14.375f,
     ry / 14.375f,
     rz / 14.375f
-  };
+  );
   outDps = applyAxisMap(native, GYRO_MAP);
   return true;
 }
@@ -390,7 +354,7 @@ static bool readMagRaw(Vec3& outRaw) {
   // -4096 indicates overflow/saturation.
   if (rx == -4096 || ry == -4096 || rz == -4096) return false;
 
-  Vec3 native = {(float)rx, (float)ry, (float)rz};
+  Vec3 native((float)rx, (float)ry, (float)rz);
   outRaw = applyAxisMap(native, MAG_MAP);
   return true;
 }
@@ -409,7 +373,7 @@ static bool readMagRaw(Vec3& outRaw) {
 class GravityEstimator {
 public:
   bool initialized = false;
-  Vec3 upBody{0.0f, 0.0f, 1.0f};
+  Vec3 upBody = Vec3(0.0f, 0.0f, 1.0f);
 
   void resetFromAccel(const Vec3& accelG) {
     if (vNorm(accelG) < 0.2f) return;
@@ -455,32 +419,24 @@ GravityEstimator gravityEstimator;
 // -----------------------------------------------------------------------------
 
 static Vec3 applyMagCalibration(const Vec3& raw) {
-  Vec3 d = {
+  Vec3 d(
     raw.x - cfg.magBias[0],
     raw.y - cfg.magBias[1],
     raw.z - cfg.magBias[2]
-  };
+  );
 
   const float* m = cfg.magMatrix;
-  return {
+  return Vec3(
     m[0]*d.x + m[1]*d.y + m[2]*d.z,
     m[3]*d.x + m[4]*d.y + m[5]*d.z,
     m[6]*d.x + m[7]*d.y + m[8]*d.z
-  };
+  );
 }
 
 static Vec3 arrowVectorBody(float arrowYawDeg) {
   float r = arrowYawDeg * 0.01745329251994329577f;
-  return {cosf(r), sinf(r), 0.0f};
+  return Vec3(cosf(r), sinf(r), 0.0f);
 }
-
-enum class HeadingQuality {
-  OK,
-  NO_MAG_CAL,
-  MAG_DISTURBANCE,
-  VERTICAL_HOLD,
-  SENSOR_ERROR
-};
 
 static const char* qualityText(HeadingQuality q) {
   switch (q) {
@@ -491,14 +447,6 @@ static const char* qualityText(HeadingQuality q) {
     default: return "SENSOR_ERROR";
   }
 }
-
-struct HeadingResult {
-  bool valid = false;
-  float headingDeg = 0.0f;
-  float magNorm = 0.0f;
-  float forwardHorizontal = 0.0f;
-  HeadingQuality quality = HeadingQuality::SENSOR_ERROR;
-};
 
 static HeadingResult computeHeading(const Vec3& magRaw, float arrowYawDeg) {
   HeadingResult r;
@@ -580,8 +528,8 @@ static float updateHeadingFilter(float rawDeg) {
 // -----------------------------------------------------------------------------
 
 static bool magCalRunning = false;
-static Vec3 magMin{0,0,0};
-static Vec3 magMax{0,0,0};
+static Vec3 magMin = Vec3(0.0f, 0.0f, 0.0f);
+static Vec3 magMax = Vec3(0.0f, 0.0f, 0.0f);
 static uint32_t magCalSamples = 0;
 
 static bool magStream = false;
@@ -659,7 +607,7 @@ bool magOk = false;
 HeadingResult lastHeadingResult;
 
 static Vec3 currentGyroBias() {
-  return {cfg.gyroBiasDps[0], cfg.gyroBiasDps[1], cfg.gyroBiasDps[2]};
+  return Vec3(cfg.gyroBiasDps[0], cfg.gyroBiasDps[1], cfg.gyroBiasDps[2]);
 }
 
 static void applyGyroBias() {
@@ -670,7 +618,7 @@ static bool calibrateGyroBlocking(uint16_t samples = 600) {
   Serial.printf("GYRO_CAL,START,%u samples,keep_device_still\n", samples);
   delay(250);
 
-  Vec3 sum{0,0,0};
+  Vec3 sum = Vec3(0.0f, 0.0f, 0.0f);
   uint16_t good = 0;
 
   for (uint16_t i = 0; i < samples; ++i) {
