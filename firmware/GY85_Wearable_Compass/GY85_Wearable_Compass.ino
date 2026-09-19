@@ -7,10 +7,16 @@
   - Gyroscope-assisted gravity estimation for stable tilt compensation.
   - Hard-iron + basic diagonal soft-iron calibration on-device.
   - Optional full 3x3 soft-iron matrix from tools/calibrate_mag.py.
-  - One-time physical arrow alignment saved in ESP32 NVS.
+  - Fixed wearable mounting:
+      +X silkscreen arrow -> toward the wearer's head
+      +Y silkscreen arrow -> toward the wearer's left hand
+      +Z                 -> toward the wearer's body
+      FORWARD            -> -Z (the visible PCB back face points forward)
   - Magnetic declination saved in NVS.
-  - Hold-last-heading near the mathematical singularity where the arrow points
-    almost vertically and its horizontal projection becomes undefined.
+  - No ARROW_SET is required for this fixed mounting.
+  - Hold-last-heading near the mathematical singularity where the physical
+    forward direction becomes almost vertical and its horizontal projection
+    becomes undefined.
 
   Serial monitor: 115200 baud, newline ending.
 */
@@ -37,8 +43,9 @@ static constexpr float LOOP_HZ = 100.0f;
 static constexpr uint32_t LOOP_US = (uint32_t)(1000000.0f / LOOP_HZ);
 static constexpr uint32_t PRINT_INTERVAL_MS = 100;
 
-// Heading is undefined when the physical arrow is nearly vertical.
-// 0.17 ~= sin(9.8 deg), so we hold the last heading near this singularity.
+// Heading is undefined when the wearer's physical forward direction is nearly
+// vertical. 0.17 ~= sin(9.8 deg), so we hold the last heading near this
+// singularity instead of allowing a random 180-degree flip.
 static constexpr float MIN_FORWARD_HORIZONTAL = 0.17f;
 
 // Magnetic disturbance gate after calibration.
@@ -117,6 +124,32 @@ static inline float wrap180(float deg) {
 static constexpr AxisMap ACCEL_MAP(0, 1, 2, +1, +1, +1);
 static constexpr AxisMap GYRO_MAP (0, 1, 2, +1, +1, +1);
 static constexpr AxisMap MAG_MAP  (0, 1, 2, +1, +1, +1);
+
+// -----------------------------------------------------------------------------
+// Fixed wearable mounting frame
+// -----------------------------------------------------------------------------
+// This firmware is now configured for the mounting described for this project:
+//
+//   PCB silkscreen +X  -> toward the wearer's HEAD
+//   PCB silkscreen +Y  -> toward the wearer's LEFT hand
+//   PCB visible back   -> faces FORWARD / away from the body
+//   PCB IC side        -> faces INWARD / toward the body
+//
+// With +X=up and +Y=left, a right-handed board frame gives +Z toward the body.
+// Therefore the wearer's forward direction is -Z.
+//
+// IMPORTANT:
+// ACCEL_MAP / GYRO_MAP / MAG_MAP must all express the three sensors in this
+// same board frame. MOUNT_CHECK helps validate the accelerometer mapping while
+// the user is standing upright and wearing the unit normally.
+
+static Vec3 wearableForwardBody() {
+  return Vec3(0.0f, 0.0f, -1.0f);  // -Z = forward, away from body
+}
+
+static Vec3 wearableNominalUpBody() {
+  return Vec3(1.0f, 0.0f, 0.0f);   // +X = toward head
+}
 
 static Vec3 applyAxisMap(const Vec3& in, const AxisMap& m) {
   const float a[3] = {in.x, in.y, in.z};
@@ -433,11 +466,6 @@ static Vec3 applyMagCalibration(const Vec3& raw) {
   );
 }
 
-static Vec3 arrowVectorBody(float arrowYawDeg) {
-  float r = arrowYawDeg * 0.01745329251994329577f;
-  return Vec3(cosf(r), sinf(r), 0.0f);
-}
-
 static const char* qualityText(HeadingQuality q) {
   switch (q) {
     case HeadingQuality::OK: return "OK";
@@ -448,7 +476,7 @@ static const char* qualityText(HeadingQuality q) {
   }
 }
 
-static HeadingResult computeHeading(const Vec3& magRaw, float arrowYawDeg) {
+static HeadingResult computeHeading(const Vec3& magRaw) {
   HeadingResult r;
   if (!gravityEstimator.initialized) return r;
 
@@ -472,8 +500,9 @@ static HeadingResult computeHeading(const Vec3& magRaw, float arrowYawDeg) {
   if (nNorm < 1.0e-6f) return r;
   northH = vScale(northH, 1.0f / nNorm);
 
-  // Physical arrow projected onto the horizontal plane.
-  Vec3 f = arrowVectorBody(arrowYawDeg);
+  // Wearer's physical forward direction projected onto the horizontal plane.
+  // For the fixed mounting used by this project: forward = -Z of the PCB.
+  Vec3 f = wearableForwardBody();
   Vec3 forwardH = vSub(f, vScale(up, vDot(f, up)));
   r.forwardHorizontal = vNorm(forwardH);
 
@@ -711,11 +740,11 @@ static void printMatrix() {
 static void printStatus() {
   Serial.printf("SENSORS,ADXL345=%d,ITG3205=%d,HMC5883L=%d\n",
                 sensorStatus.accel, sensorStatus.gyro, sensorStatus.mag);
-  Serial.printf("CFG,gyro=%d,mag=%d,arrow=%d,decl=%.3f,arrowYaw=%.3f\n",
+  Serial.printf("CFG,gyro=%d,mag=%d,decl=%.3f\n",
                 !!(cfg.flags & CFG_GYRO_CAL),
                 !!(cfg.flags & CFG_MAG_CAL),
-                !!(cfg.flags & CFG_ARROW_SET),
-                cfg.declinationDeg, cfg.arrowYawDeg);
+                cfg.declinationDeg);
+  Serial.println("MOUNT,fixed=1,x=HEAD,y=LEFT,z=BODY,forward=-Z,pcb_back=FRONT");
   Serial.printf("GYRO_BIAS_DPS,%.6f,%.6f,%.6f\n",
                 cfg.gyroBiasDps[0], cfg.gyroBiasDps[1], cfg.gyroBiasDps[2]);
   printMatrix();
@@ -742,8 +771,9 @@ static void printHelp() {
   Serial.println("  MAG_MATRIX bX bY bZ m00 m01 m02 m10 m11 m12 m20 m21 m22 ref");
   Serial.println("  MAG_RESET");
   Serial.println("  DECL <degrees>            # east positive, west negative");
-  Serial.println("  ARROW_SET <bearing_deg>   # device nearly level; saves one-time arrow");
-  Serial.println("  ARROW_RESET");
+  Serial.println("  MOUNT_CHECK               # wear upright; verifies +X points to head");
+  Serial.println("  ARROW_SET ...             # legacy: ignored; fixed mounting uses -Z");
+  Serial.println("  ARROW_RESET               # legacy: ignored");
   Serial.println("  RESET_ALL");
 }
 
@@ -755,39 +785,28 @@ static void scanI2C() {
   Serial.println("I2C_SCAN,END");
 }
 
-static bool setArrowFromKnownBearing(float knownBearingDeg) {
-  if (!magOk || !gravityEstimator.initialized) {
-    Serial.println("ARROW_SET,FAILED,no_valid_heading");
-    return false;
+static void printMountCheck() {
+  if (!gravityEstimator.initialized) {
+    Serial.println("MOUNT_CHECK,FAILED,gravity_not_initialized");
+    return;
   }
 
-  // The arrow lies in the PCB XY plane, so one-time yaw offset calibration is
-  // best done with the PCB approximately level.
   Vec3 up = vNormalize(gravityEstimator.upBody);
-  float levelness = fabsf(up.z);
-  if (levelness < 0.94f) {
-    Serial.printf("ARROW_SET,FAILED,device_not_level,abs_up_z=%.3f\n", levelness);
-    return false;
+  Vec3 expectedUp = wearableNominalUpBody();
+  float alignment = vDot(up, expectedUp);
+
+  const char* result = "CHECK_AXIS_MAP";
+  if (alignment >= 0.80f) {
+    result = "OK";
+  } else if (alignment <= -0.80f) {
+    result = "X_REVERSED_OR_DEVICE_UPSIDE_DOWN";
   }
 
-  HeadingResult base = computeHeading(magRaw, 0.0f);
-  if (!base.valid) {
-    Serial.printf("ARROW_SET,FAILED,quality=%s\n", qualityText(base.quality));
-    return false;
-  }
-
-  cfg.arrowYawDeg = wrap180(base.headingDeg - knownBearingDeg);
-  cfg.flags |= CFG_ARROW_SET;
-
-  bool ok = saveConfig();
-  if (ok) {
-    resetHeadingFilter(wrap360(knownBearingDeg));
-    Serial.printf("ARROW_SET,SAVED,known=%.3f,base=%.3f,arrowYaw=%.3f\n",
-                  wrap360(knownBearingDeg), base.headingDeg, cfg.arrowYawDeg);
-  } else {
-    Serial.println("ARROW_SET,SAVE_FAILED");
-  }
-  return ok;
+  Serial.printf(
+    "MOUNT_CHECK,result=%s,alignment=%.3f,up=%.3f,%.3f,%.3f,"
+    "expected_up=+X,forward=-Z\n",
+    result, alignment, up.x, up.y, up.z
+  );
 }
 
 static void handleCommand(String line) {
@@ -893,22 +912,13 @@ static void handleCommand(String line) {
     return;
   }
 
-  if (upper.startsWith("ARROW_SET")) {
-    float v[1];
-    int n = parseFloats(line.substring(String("ARROW_SET").length()), v, 1);
-    if (n != 1) {
-      Serial.println("ARROW_SET,FAILED,example=ARROW_SET 0");
-      return;
-    }
-    setArrowFromKnownBearing(wrap360(v[0]));
+  if (upper == "MOUNT_CHECK") {
+    printMountCheck();
     return;
   }
 
-  if (upper == "ARROW_RESET") {
-    cfg.arrowYawDeg = 0.0f;
-    cfg.flags &= ~CFG_ARROW_SET;
-    saveConfig();
-    Serial.println("ARROW_RESET,DONE");
+  if (upper.startsWith("ARROW_SET") || upper == "ARROW_RESET") {
+    Serial.println("ARROW,IGNORED,fixed_mount=1,forward=-Z,no_arrow_setup_needed");
     return;
   }
 
@@ -943,6 +953,7 @@ void setup() {
 
   Serial.println();
   Serial.println("GY85_WEARABLE_COMPASS,BOOT");
+  Serial.println("MOUNT,fixed=1,x=HEAD,y=LEFT,z=BODY,forward=-Z,pcb_back=FRONT");
 
   bool loaded = loadConfig();
   Serial.printf("CFG,%s\n", loaded ? "LOADED" : "DEFAULTS");
@@ -1021,7 +1032,7 @@ void loop() {
       Serial.printf("MAGCSV,%.3f,%.3f,%.3f\n", magRaw.x, magRaw.y, magRaw.z);
     }
 
-    lastHeadingResult = computeHeading(magRaw, cfg.arrowYawDeg);
+    lastHeadingResult = computeHeading(magRaw);
     if (lastHeadingResult.valid) {
       updateHeadingFilter(lastHeadingResult.headingDeg);
     }
@@ -1041,16 +1052,13 @@ void loop() {
     lastPrintMs = nowMs;
 
     float outHeading = headingFilterInit ? headingFilteredDeg : 0.0f;
-    const char* arrowState = (cfg.flags & CFG_ARROW_SET) ? "SET" : "UNSET";
-
     Serial.printf(
-      "COMPASS,heading=%.2f,raw=%.2f,dir=%s,quality=%s,arrow=%s,"
+      "COMPASS,heading=%.2f,raw=%.2f,dir=%s,quality=%s,mount=FIXED_NEG_Z,"
       "magNorm=%.3f,fwdHoriz=%.3f,up=%.3f,%.3f,%.3f\n",
       outHeading,
       lastHeadingResult.headingDeg,
       cardinal8(outHeading),
       qualityText(lastHeadingResult.quality),
-      arrowState,
       lastHeadingResult.magNorm,
       lastHeadingResult.forwardHorizontal,
       gravityEstimator.upBody.x,
