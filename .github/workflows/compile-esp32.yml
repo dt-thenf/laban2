@@ -23,6 +23,8 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.x"
+      - name: Check Python syntax
+        run: python -m py_compile tools/capture_mag_guided.py tools/calibrate_mag.py
       - name: Install PlatformIO
         run: pip install --disable-pip-version-check platformio
       - name: Build ESP32 firmware
