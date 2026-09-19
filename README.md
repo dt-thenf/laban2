@@ -625,7 +625,6 @@ Các giá trị sau tồn tại qua reboot:
 - magnetometer matrix;
 - magnetic norm reference;
 - declination;
-- arrow yaw offset.
 
 ---
 
@@ -667,3 +666,58 @@ Các bước nâng cấp tiếp theo có thể gồm:
 - hỗ trợ QMC5883L clone.
 
 Đối với wearable dùng trong nhà, magnetic disturbance từ kết cấu thép và thiết bị điện thường là giới hạn lớn hơn độ phân giải danh nghĩa của HMC5883L. Vì vậy nên đánh giá hệ thống trong đúng môi trường sử dụng cuối thay vì chỉ test trên bàn.
+
+
+## 9. Cấu hình đeo cố định của dự án
+
+Firmware hiện được cấu hình đúng theo cách lắp thực tế:
+
+- mũi tên **+X** in trên PCB hướng lên đầu;
+- mũi tên **+Y** hướng sang tay trái;
+- mặt PCB giống hình tham chiếu hướng ra phía trước;
+- mặt có các IC hướng vào cơ thể.
+
+Với hệ trục tay phải này, **+Z hướng vào cơ thể**, do đó hướng tiến của người đeo là:
+
+```
+FORWARD = -Z
+```
+
+Firmware dùng trực tiếp vector `(0, 0, -1)` làm hướng phía trước. Vì vậy:
+
+- không cần `ARROW_SET`;
+- PCB không cần đặt nằm ngang khi sử dụng;
+- thiết bị được đeo dọc sát người đúng như thiết kế;
+- tilt compensation vẫn chiếu vector `-Z` xuống mặt phẳng ngang để tính azimuth.
+
+Sau khi đeo đúng tư thế và người đứng thẳng, chạy:
+
+```
+MOUNT_CHECK
+```
+
+Kết quả tốt:
+
+```
+MOUNT_CHECK,result=OK,...
+```
+
+Khi đó vector trọng lực phải gần `+X` vì +X đang hướng lên đầu.
+
+Nếu nhận:
+
+```
+MOUNT_CHECK,result=X_REVERSED_OR_DEVICE_UPSIDE_DOWN
+```
+
+thì dấu trục X hoặc cách đeo đang ngược.
+
+Nếu nhận:
+
+```
+MOUNT_CHECK,result=CHECK_AXIS_MAP
+```
+
+thì cần kiểm tra `ACCEL_MAP / GYRO_MAP / MAG_MAP` trên đúng board GY-85 thực tế.
+
+Các lệnh `ARROW_SET` và `ARROW_RESET` chỉ còn được giữ để tương thích; firmware sẽ bỏ qua chúng.
