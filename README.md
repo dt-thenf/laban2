@@ -175,6 +175,85 @@ và lưu vào NVS.
 
 ---
 
+## 6.1 Cách dễ nhất: thu magnetometer bằng wizard Python
+
+Repo có sẵn:
+
+\`\`\`
+tools/capture_mag_guided.py
+\`\`\`
+
+Script này tự:
+
+- tìm và cho chọn cổng COM của ESP32;
+- mở Serial ở 115200 baud;
+- gửi \`MAG_STREAM 1\`;
+- hướng dẫn từng tư thế xoay/lật GY-85;
+- đếm ngược từng bước;
+- chỉ ghi các dòng \`MAGCSV\` hợp lệ;
+- bỏ mẫu trùng liên tiếp;
+- gửi \`MAG_STREAM 0\` khi kết thúc;
+- tạo \`tools/mag_log.txt\`;
+- in số mẫu và range X/Y/Z;
+- nhắc lệnh chạy \`calibrate_mag.py\` tiếp theo.
+
+### Chuẩn bị một lần
+
+Cài pySerial:
+
+\`\`\`powershell
+pip install pyserial
+\`\`\`
+
+Đóng Arduino Serial Monitor hoặc PlatformIO Monitor trước khi chạy để tránh cổng COM bị chiếm.
+
+### Chạy wizard
+
+Từ thư mục \`tools\`:
+
+\`\`\`powershell
+python .\capture_mag_guided.py
+\`\`\`
+
+Nếu máy có nhiều cổng COM, script sẽ hiện danh sách và hỏi bạn chọn số tương ứng với ESP32.
+
+Sau đó chỉ cần đọc hướng dẫn trên màn hình và nhấn Enter ở từng bước. Các bước gồm:
+
+1. mặt bo ngửa lên, xoay ngang 360°;
+2. mặt bo úp xuống, xoay ngang 360°;
+3. dựng cạnh trái và xoay;
+4. dựng cạnh phải và xoay;
+5. đầu mũi tên hướng lên;
+6. đầu mũi tên hướng xuống;
+7. vẽ hình số 8 trong không gian;
+8. quay tự do quanh cả ba trục để bổ sung độ phủ.
+
+Mặc định mỗi bước ghi 7 giây. Có thể tăng:
+
+\`\`\`powershell
+python .\capture_mag_guided.py --seconds 10
+\`\`\`
+
+Hoặc chỉ định thẳng COM:
+
+\`\`\`powershell
+python .\capture_mag_guided.py --port COM5
+\`\`\`
+
+Kết thúc, file được tạo tại:
+
+\`\`\`
+tools/mag_log.txt
+\`\`\`
+
+Script sẽ in đường dẫn tuyệt đối để dễ kiểm tra.
+
+Sau đó chạy:
+
+\`\`\`powershell
+python .\calibrate_mag.py .\mag_log.txt
+\`\`\`
+
 ## 7. Hiệu chỉnh nâng cao — full 3x3 soft-iron
 
 Đây là phương án nên dùng cho bản thiết bị chính thức.
