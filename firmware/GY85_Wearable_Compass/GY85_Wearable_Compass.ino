@@ -828,7 +828,7 @@ static bool setArrowFromKnownBearing(float knownBearingDeg) {
     return false;
   }
 
-  cfg.arrowYawDeg = wrap180(knownBearingDeg - base.headingDeg);
+  cfg.arrowYawDeg = wrap180(base.headingDeg - knownBearingDeg);
   cfg.flags |= CFG_ARROW_SET;
 
   bool ok = saveConfig();
