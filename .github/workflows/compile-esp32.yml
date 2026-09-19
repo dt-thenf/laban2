@@ -1,0 +1,29 @@
+name: Compile ESP32 Compass
+
+on:
+  pull_request:
+    paths:
+      - "firmware/GY85_Wearable_Compass/**"
+      - "platformio.ini"
+      - ".github/workflows/compile-esp32.yml"
+  push:
+    branches:
+      - main
+      - feature/gy85-wearable-compass
+    paths:
+      - "firmware/GY85_Wearable_Compass/**"
+      - "platformio.ini"
+      - ".github/workflows/compile-esp32.yml"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+      - name: Install PlatformIO
+        run: pip install --disable-pip-version-check platformio
+      - name: Build ESP32 firmware
+        run: pio run -e esp32dev
