@@ -387,7 +387,7 @@ MOUNT_CHECK
 Kết quả mong muốn:
 
 ```
-MOUNT_CHECK,result=OK,...
+KIỂM_TRA_ĐEO,kết_quả=ĐÚNG,...
 ```
 
 Khi đứng thẳng, vector `UP` phải gần `+X`, vì +X đang hướng lên đầu.
@@ -408,19 +408,27 @@ Luồng sử dụng bình thường:
 Ví dụ:
 
 \`\`\`
-COMPASS,heading=83.42,raw=84.10,dir=E,quality=OK,mount=FIXED_NEG_Z,...
+LA_BÀN,θ=83.42°,θ_thô=84.10°,hướng=Đông,trạng_thái=Tốt,|B|=...,F_ngang=...,U=(...)
 \`\`\`
 
-Các hướng 8 phương:
+Các hướng 8 phương được hiển thị bằng tiếng Việt:
 
-- N
-- NE
-- E
-- SE
-- S
-- SW
-- W
-- NW
+- Bắc
+- Đông Bắc
+- Đông
+- Đông Nam
+- Nam
+- Tây Nam
+- Tây
+- Tây Bắc
+
+Ký hiệu chính trong dòng la bàn:
+
+- `θ`: góc hướng đã lọc, đơn vị độ `°`;
+- `θ_thô`: góc hướng chưa lọc;
+- `|B|`: độ lớn vector từ trường sau hiệu chỉnh;
+- `F_ngang`: độ lớn hình chiếu ngang của vector hướng tiến;
+- `U=(Ux,Uy,Uz)`: vector hướng lên ước lượng từ accelerometer + gyro.
 
 ---
 
@@ -705,7 +713,7 @@ Khi đó vector trọng lực phải gần `+X` vì +X đang hướng lên đầ
 Nếu nhận:
 
 ```
-MOUNT_CHECK,result=X_REVERSED_OR_DEVICE_UPSIDE_DOWN
+KIỂM_TRA_ĐEO,kết_quả=X_BỊ_NGƯỢC_HOẶC_ĐEO_NGƯỢC
 ```
 
 thì dấu trục X hoặc cách đeo đang ngược.
@@ -713,7 +721,7 @@ thì dấu trục X hoặc cách đeo đang ngược.
 Nếu nhận:
 
 ```
-MOUNT_CHECK,result=CHECK_AXIS_MAP
+KIỂM_TRA_ĐEO,kết_quả=CẦN_KIỂM_TRA_AXIS_MAP
 ```
 
 thì cần kiểm tra `ACCEL_MAP / GYRO_MAP / MAG_MAP` trên đúng board GY-85 thực tế.
