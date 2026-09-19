@@ -92,18 +92,19 @@ STEPS = [
         ],
     ),
     (
-        "DAU MUI TEN HUONG LEN",
+        "MUI TEN +X TREN PCB HUONG LEN",
         [
             "Dung bo mach theo chieu doc.",
-            "Cho dau ma ban chon lam MUI TEN vat ly huong LEN.",
+            "Cho mui ten +X in tren PCB huong LEN.",
+            "Day cung la huong +X se chi len dau khi deo thiet bi.",
             "Trong tu the nay, xoay/chao cham de cam bien di qua nhieu huong.",
         ],
     ),
     (
-        "DAU MUI TEN HUONG XUONG",
+        "MUI TEN +X TREN PCB HUONG XUONG",
         [
             "Dao nguoc tu the buoc truoc.",
-            "Cho dau MUI TEN vat ly huong XUONG.",
+            "Cho mui ten +X in tren PCB huong XUONG.",
             "Xoay/chao cham de phu tiep cac huong 3D con thieu.",
         ],
     ),
@@ -314,6 +315,7 @@ def print_header(port: str, output_path: Path, seconds: int) -> None:
     print(f"So buoc           : {len(STEPS)}")
     print("\nQUAN TRONG:")
     print("  - Calibrate voi TOAN BO thiet bi da lap hoan chinh.")
+    print("  - Cau hinh deo co dinh: +X len dau, +Y sang tay trai, mat PCB sau huong ra truoc.")
     print("  - Tranh xa dien thoai, loa, nam cham, motor va vat thep lon.")
     print("  - Xoay CHAM, DEU, phu nhieu huong 3D.")
     print("  - Script chi luu dong MAGCSV hop le.")
