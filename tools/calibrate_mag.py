@@ -108,31 +108,22 @@ def fit_ellipsoid(points: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     )
     b = np.array([p[6], p[7], p[8]], dtype=float)
 
-    # Make the quadratic form positive if the least-squares fit selected
-    # the equivalent negative-sign representation.
-    evals = np.linalg.eigvalsh(q)
-    if np.all(evals < 0):
-        q = -q
-        b = -b
-        evals = -evals
-
-    if np.any(evals <= 0):
-        raise ValueError(
-            "Ellipsoid fit is not positive definite. "
-            "Collect a better-distributed 3D dataset away from magnetic interference."
-        )
-
     center = -0.5 * np.linalg.solve(q, b)
     scale = 1.0 + center @ q @ center
 
-    if scale <= 0:
+    if abs(scale) < 1.0e-12:
         raise ValueError("Invalid ellipsoid scale. Re-capture calibration data.")
 
+    # Q and scale may both be negative because the fitted equation has a fixed
+    # right-hand side of +1. What matters physically is M = Q / scale.
     m = q / scale
 
     eigvals, eigvecs = np.linalg.eigh(m)
     if np.any(eigvals <= 0):
-        raise ValueError("Calibration matrix is not positive definite.")
+        raise ValueError(
+            "Calibration ellipsoid is not positive definite. "
+            "Collect a better-distributed 3D dataset away from magnetic interference."
+        )
 
     correction = eigvecs @ np.diag(np.sqrt(eigvals)) @ eigvecs.T
     return center, correction
