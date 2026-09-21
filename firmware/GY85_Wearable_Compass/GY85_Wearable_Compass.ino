@@ -485,13 +485,16 @@ static HeadingResult computeHeading(const Vec3& magRaw) {
   r.magNorm = vNorm(mag);
   if (r.magNorm < 1.0e-6f) return r;
 
-  // Reject magnetic anomalies after a reference norm exists.
+  // Detect magnetic anomalies, but do NOT return here.
+  // We still compute the instantaneous/raw heading so Serial output shows the
+  // real angle (for example 2xx degrees) instead of a misleading default 0°.
+  // The quality flag is used later to keep disturbed samples out of the
+  // filtered heading.
+  bool magneticDisturbance = false;
   if ((cfg.flags & CFG_MAG_CAL) && cfg.magRefNorm > 1.0e-6f) {
     float ratio = r.magNorm / cfg.magRefNorm;
-    if (ratio < MAG_NORM_MIN_RATIO || ratio > MAG_NORM_MAX_RATIO) {
-      r.quality = HeadingQuality::MAG_DISTURBANCE;
-      return r;
-    }
+    magneticDisturbance =
+        (ratio < MAG_NORM_MIN_RATIO || ratio > MAG_NORM_MAX_RATIO);
   }
 
   // Horizontal magnetic north in body coordinates.
@@ -524,9 +527,17 @@ static HeadingResult computeHeading(const Vec3& magRaw) {
 
   r.valid = true;
   r.headingDeg = heading;
-  r.quality = (cfg.flags & CFG_MAG_CAL)
-            ? HeadingQuality::OK
-            : HeadingQuality::NO_MAG_CAL;
+
+  // "valid" means the heading is geometrically computable. A magnetic
+  // disturbance does not erase the raw angle; it only marks this sample as
+  // untrusted for the smoothed/filtered output.
+  if (magneticDisturbance) {
+    r.quality = HeadingQuality::MAG_DISTURBANCE;
+  } else {
+    r.quality = (cfg.flags & CFG_MAG_CAL)
+              ? HeadingQuality::OK
+              : HeadingQuality::NO_MAG_CAL;
+  }
   return r;
 }
 
@@ -1043,11 +1054,16 @@ void loop() {
     }
 
     lastHeadingResult = computeHeading(magRaw);
-    if (lastHeadingResult.valid) {
+
+    // Always expose the computed raw heading through lastHeadingResult, but do
+    // not let a sample flagged as magnetic disturbance pull the filtered
+    // heading away from the last trusted direction.
+    if (lastHeadingResult.valid &&
+        lastHeadingResult.quality != HeadingQuality::MAG_DISTURBANCE) {
       updateHeadingFilter(lastHeadingResult.headingDeg);
     }
-    // If invalid because vertical or magnetic disturbance, keep last filtered
-    // heading instead of producing an arbitrary jump.
+    // Near the forward-vector singularity computeHeading() remains invalid, so
+    // the filtered heading is also held at the last trustworthy value.
   }
 
   if (rawStream) {
